@@ -23,6 +23,7 @@ import heapq
 import psutil
 import setproctitle
 import time
+import time
 import zmq
 
 from sglang.srt.disaggregation.utils import DisaggregationMode
@@ -32,6 +33,7 @@ from sglang.srt.managers.io_struct import (
     BlockReqInput,
     TokenizedEmbeddingReqInput,
     TokenizedGenerateReqInput,
+    WorkerPayloadStatus,
     WorkerPayloadStatus,
 )
 from sglang.srt.managers.schedule_batch import Req
@@ -115,18 +117,19 @@ class DataParallelController:
                     dp_port_args[dp_rank].scheduler_input_ipc_name,
                     True,
                 )
+
             if self.load_balance_method == LoadBalanceMethod.SHORTEST_QUEUE:
                 # no need to lock here, because we read & write in the same thread
                 self.dp_workload_status = [WorkerPayloadStatus(0, 0) for _ in range(server_args.dp_size)]
-                self.dp_workload_status_heap = self.build_dp_workload_status_heap_nolock()
+                self.dp_workload_status_heap = self._build_dp_workload_status_heap_nolock()
 
                 self.recv_from_workers = get_zmq_socket(
                     self.context, zmq.PULL, port_args.worker_workload_status_ipc_name, True
                 )
 
         self.max_req_input_len = None
-    
-    def build_dp_workload_status_heap_nolock(self):
+
+    def _build_dp_workload_status_heap_nolock(self):
         workload_heap = [
             # put queued_reqs first, then running_reqs, the order is important
             (status.queued_reqs, status.running_reqs, i)
@@ -296,7 +299,6 @@ class DataParallelController:
             counter = req.bootstrap_room % len(self.workers)
             self.workers[counter].send_pyobj(req)
             logger.info(f"[hanhan] bootstrap room: {req.bootstrap_room}, Round robin scheduler: {counter}")
-
 
     def shortest_queue_scheduler(self, req):
         queued_reqs, running_reqs, shortest_queue_worker_rank = heapq.heappop(self.dp_workload_status_heap)
