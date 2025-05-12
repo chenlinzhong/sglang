@@ -11,7 +11,7 @@ from typing import List
 import aiohttp
 import orjson
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import ORJSONResponse, Response, StreamingResponse
 
 
@@ -207,10 +207,12 @@ async def handle_generate_request(request_data: dict):
         )
 
 
+@app.post("/v1/completions")
 @app.post("/v1/chat/completions")
-async def handle_completion_request(request_data: dict):
+async def handle_completion_request(request_data: dict, request: Request):
     prefill_server, bootstrap_port, decode_server = load_balancer.select_pair()
 
+    path = request.url.path.lstrip("/")
     # Parse and transform prefill_server for bootstrap data
     parsed_url = urllib.parse.urlparse(prefill_server)
     hostname = parsed_url.hostname
@@ -228,14 +230,14 @@ async def handle_completion_request(request_data: dict):
             modified_request,
             prefill_server,
             decode_server,
-            endpoint="v1/chat/completions",
+            endpoint=path,
         )
     else:
         return await load_balancer.generate(
             modified_request,
             prefill_server,
             decode_server,
-            endpoint="v1/chat/completions",
+            endpoint=path,
         )
 
 
