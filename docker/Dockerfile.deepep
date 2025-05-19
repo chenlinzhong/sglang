@@ -80,6 +80,11 @@ RUN wget https://github.com/user-attachments/files/20036217/attachment_ep_statis
 RUN ln -s /usr/lib/x86_64-linux-gnu/libmlx5.so.1 /usr/lib/x86_64-linux-gnu/libmlx5.so
 # RUN apt-get install -y libfabric-dev
 
+WORKDIR /sgl-workspace
+RUN git clone https://github.com/deepseek-ai/FlashMLA.git
+WORKDIR /sgl-workspace/FlashMLA
+RUN python3 setup.py install
+
 # DeepEP
 WORKDIR /sgl-workspace
 RUN git clone --branch h20_support https://github.com/bytedance-iaas/DeepEP.git
@@ -111,9 +116,16 @@ WORKDIR /sgl-workspace/DeepEP
 ENV NVSHMEM_DIR=/sgl-workspace/nvshmem/install
 RUN NVSHMEM_DIR=/sgl-workspace/nvshmem/install pip install .
 
+# Install mooncake
+RUN python3 -m pip install mooncake-transfer-engine
+
+# Install sglang
+WORKDIR /sgl-workspace
+RUN git clone --branch ds_deepep_fix --depth=1 https://github.com/bytedance-iaas/sglang.git sglang_deepep
+# COPY ../python /sgl-workspace/sglang_deepep/python
+
+WORKDIR /sgl-workspace/sglang_deepep
 RUN python3 -m pip install --upgrade pip setuptools wheel html5lib six \
-    && git clone --branch ds_deepep_fix --depth=1 https://github.com/bytedance-iaas/sglang.git \
-    && cd sglang \
     && python3 -m pip --no-cache-dir install -e "python[all]" --find-links https://flashinfer.ai/whl/cu124/torch2.6/flashinfer-python
 
 # Set workspace
