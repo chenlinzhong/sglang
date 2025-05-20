@@ -318,7 +318,8 @@ class MooncakeKVManager(BaseKVManager):
                             self.sync_status_to_decode_endpoint(
                                 req.endpoint, req.dst_port, req.room
                             )
-                            self.transfer_infos.pop(req.room)
+                            if req.room in self.transfer_infos:
+                                self.transfer_infos.pop(req.room)
 
                 except queue.Empty:
                     continue
