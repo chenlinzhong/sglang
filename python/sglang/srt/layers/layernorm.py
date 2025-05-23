@@ -22,7 +22,7 @@ import torch.nn as nn
 from sglang.srt.custom_op import CustomOp
 from sglang.srt.layers.elementwise import fused_rmsnorm
 from sglang.srt.layers.triton_ops.layernorm import fused_add_rms_norm_triton
-from sglang.srt.utils import is_cuda, is_hip
+from sglang.srt.utils import get_bool_env_var, is_cuda, is_hip
 
 _is_cuda = is_cuda()
 _is_hip = is_hip()
@@ -52,6 +52,8 @@ class RMSNorm(CustomOp):
         self.variance_epsilon = eps
 
     def forward(self, *args, **kwargs):
+        if get_bool_env_var("SGL_USE_TRITON_NON_ATTN"):
+            return self.forward_triton(*args, **kwargs)
         if torch.compiler.is_compiling():
             return self.forward_native(*args, **kwargs)
         if _is_cuda:
