@@ -8,19 +8,19 @@ ARG gdkv_sdk_version=0.0.1
 ARG eic_sdk_version=1.0
 RUN pip config set global.index-url https://mirrors.ivolces.com/pypi/simple/
 
-RUN pip index versions sglang -i https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/
+RUN http_proxy='' pip index versions sglang -i https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/
 
 # sglang 安装
-RUN pip install "sglang[all]==${sglang_version}" --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
+RUN http_proxy='' pip install "sglang[all]==${sglang_version}" --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
 
 # sgl-kernel安装
-RUN pip install sgl_kernel==${sgl_kernel_version} --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
+RUN http_proxy='' pip install sgl_kernel==${sgl_kernel_version} --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
 
 # gdkv sdk安装
-RUN pip install hpkv==${gdkv_sdk_version} --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
+RUN http_proxy='' pip install hpkv==${gdkv_sdk_version} --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
 
 # eic sdk安装
-RUN pip install eic==${eic_sdk_version} --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
+RUN http_proxy='' pip install eic==${eic_sdk_version} --extra-index-url https://scqq9isgq31i0fb8nt4eg.apigateway-cn-beijing.volceapi.com/simple/ --extra-index-url https://bytedpypi.byted.org/simple
 
 # onion 安装
 RUN curl -fsSL https://mirrors.byted.org/extra-tools/ubuntu/GPG-KEY-system | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/volc-extra-tools.gpg && \
@@ -120,7 +120,7 @@ ENV NVSHMEM_DIR=/sgl-workspace/nvshmem/install
 RUN NVSHMEM_DIR=/sgl-workspace/nvshmem/install pip install .
 
 # Install mooncake
-RUN python3 -m pip install mooncake-transfer-engine
+RUN python3 -m pip install mooncake-transfer-engine --extra-index-url https://bytedpypi.byted.org/simple
 
 # Set workspace
 WORKDIR /sgl-workspace
