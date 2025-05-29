@@ -352,7 +352,7 @@ class DataParallelController:
                 for status in all_workload_status:
                     self.dp_workload_status[status.dp_rank] = status.status
                 # rebuild heap
-                self.dp_workload_status_heap = self.build_dp_workload_status_heap_nolock()
+                self.dp_workload_status_heap = self._build_dp_workload_status_heap_nolock()
 
                 last_scheduler_status_check_time = now
 
