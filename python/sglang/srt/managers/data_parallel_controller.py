@@ -19,7 +19,6 @@ import signal
 import threading
 from enum import Enum, auto
 from typing import Optional
-
 import heapq
 import psutil
 import setproctitle
@@ -116,7 +115,6 @@ class DataParallelController:
                     dp_port_args[dp_rank].scheduler_input_ipc_name,
                     True,
                 )
-
             if self.load_balance_method == LoadBalanceMethod.SHORTEST_QUEUE:
                 # no need to lock here, because we read & write in the same thread
                 self.dp_workload_status = [WorkerPayloadStatus(0, 0) for _ in range(server_args.dp_size)]
@@ -131,7 +129,7 @@ class DataParallelController:
     def build_dp_workload_status_heap_nolock(self):
         workload_heap = [
             # put queued_reqs first, then running_reqs, the order is important
-            (status.running_reqs, status.queued_reqs, i)
+            (status.queued_reqs, status.running_reqs, i)
                 for i, status in enumerate(self.dp_workload_status)
         ]
         heapq.heapify(workload_heap)
@@ -301,16 +299,14 @@ class DataParallelController:
 
 
     def shortest_queue_scheduler(self, req):
-        popped_element = heapq.heappop(self.dp_workload_status_heap)
-        running_reqs, queued_reqs, shortest_queue_worker_rank = popped_element
+        queued_reqs, running_reqs, shortest_queue_worker_rank = heapq.heappop(self.dp_workload_status_heap)
         logger.info(f"[hanhan] bootstrap room: {req.bootstrap_room}, Popped element: {popped_element}")
 
         self.workers[shortest_queue_worker_rank].send_pyobj(req)
 
-        new_queued = running_reqs + 1
-        self.dp_workload_status[shortest_queue_worker_rank].running_reqs = new_queued
-        pushed_element = (new_queued, queued_reqs, shortest_queue_worker_rank)
-        heapq.heappush(self.dp_workload_status_heap, pushed_element)
+        new_queued = queued_reqs + 1
+        self.dp_workload_status[shortest_queue_worker_rank].queued_reqs = new_queued
+        heapq.heappush(self.dp_workload_status_heap, (new_queued, running_reqs, shortest_queue_worker_rank))
 
     def event_loop(self):
         last_scheduler_status_check_time = time.time()
@@ -350,6 +346,7 @@ class DataParallelController:
                         all_workload_status.append(workload_status)
                     except zmq.ZMQError:
                         break
+
                 for status in all_workload_status:
                     self.dp_workload_status[status.dp_rank] = status.status
                 # rebuild heap
