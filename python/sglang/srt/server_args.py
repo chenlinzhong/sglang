@@ -1338,6 +1338,9 @@ class PortArgs:
     # The ipc filename for rpc call between Engine and Scheduler
     rpc_ipc_name: str
 
+    # The ipc filename for Scheduler to send metrics
+    metrics_ipc_name: str
+
     @staticmethod
     def init_new(server_args, dp_rank: Optional[int] = None) -> "PortArgs":
         port = server_args.port + random.randint(100, 1000)
@@ -1357,6 +1360,7 @@ class PortArgs:
                 detokenizer_ipc_name=f"ipc://{tempfile.NamedTemporaryFile(delete=False).name}",
                 nccl_port=port,
                 rpc_ipc_name=f"ipc://{tempfile.NamedTemporaryFile(delete=False).name}",
+                metrics_ipc_name = f"ipc://{tempfile.NamedTemporaryFile(delete=False).name}"
             )
         else:
             # DP attention. Use TCP + port to handle both single-node and multi-node.
@@ -1387,6 +1391,7 @@ class PortArgs:
                 detokenizer_ipc_name=f"tcp://{dist_init_host}:{port_base + 1}",
                 nccl_port=port,
                 rpc_ipc_name=f"tcp://{dist_init_host}:{port_base + 2}",
+                metrics_ipc_name = f"ipc://{tempfile.NamedTemporaryFile(delete=False).name}"
             )
 
 

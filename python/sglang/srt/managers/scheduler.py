@@ -164,6 +164,14 @@ class EmbeddingBatchResult:
     embeddings: torch.Tensor
     bid: int
 
+class KvMetrics:
+    def __init__(self):
+        self.request_active_slots = None
+        self.request_total_slots = None
+        self.kv_active_blocks = None
+        self.num_requests_waiting = None
+        self.gpu_cache_usage_perc = None
+        self.gpu_prefix_cache_hit_rate = None
 
 class Scheduler(
     SchedulerOutputProcessorMixin,
@@ -222,6 +230,9 @@ class Scheduler(
                 context, zmq.PUSH, port_args.tokenizer_ipc_name, False
             )
 
+            self.send_metrics_from_scheduler = get_zmq_socket(
+                context, zmq.PUSH, port_args.metrics_ipc_name, False)
+
             if server_args.skip_tokenizer_init:
                 # Directly send to the TokenizerManager
                 self.send_to_detokenizer = get_zmq_socket(
@@ -239,6 +250,7 @@ class Scheduler(
         else:
             self.recv_from_tokenizer = None
             self.recv_from_rpc = None
+            self.send_metrics_from_scheduler = None
             self.send_to_tokenizer = SimpleNamespace(send_pyobj=lambda x: None)
             self.send_to_detokenizer = SimpleNamespace(send_pyobj=lambda x: None)
 
@@ -1169,6 +1181,17 @@ class Scheduler(
 
             self.metrics_collector.log_stats(self.stats)
 
+            kv_metrics = KvMetrics()
+            kv_metrics.request_active_slots = self.stats.num_running_reqs
+            kv_metrics.request_total_slots = self.max_running_requests
+            kv_metrics.kv_active_blocks = self.stats.token_usage * self.max_total_num_tokens
+            kv_metrics.num_requests_waiting = self.stats.num_queue_reqs
+            kv_metrics.gpu_cache_usage_perc = self.stats.token_usage
+            kv_metrics.gpu_prefix_cache_hit_rate = self.stats.cache_hit_rate
+
+            if not self.send_metrics_from_scheduler.closed:
+                self.send_metrics_from_scheduler.send_pyobj(kv_metrics)
+
     def log_decode_stats(self, running_batch=None):
         batch = running_batch or self.running_batch
 
@@ -1223,6 +1246,17 @@ class Scheduler(
             self.stats.num_queue_reqs = len(self.waiting_queue)
             self.stats.spec_accept_length = spec_accept_length
             self.metrics_collector.log_stats(self.stats)
+
+            kv_metrics = KvMetrics()
+            kv_metrics.request_active_slots = self.stats.num_running_reqs
+            kv_metrics.request_total_slots = self.max_running_requests
+            kv_metrics.kv_active_blocks = self.stats.token_usage * self.max_total_num_tokens
+            kv_metrics.num_requests_waiting = self.stats.num_queue_reqs
+            kv_metrics.gpu_cache_usage_perc = self.stats.token_usage
+            kv_metrics.gpu_prefix_cache_hit_rate = self.stats.cache_hit_rate
+
+            if not self.send_metrics_from_scheduler.closed:
+                self.send_metrics_from_scheduler.send_pyobj(kv_metrics)
 
     def check_memory(self):
         available_size = (
