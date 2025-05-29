@@ -303,7 +303,7 @@ class DataParallelController:
     def shortest_queue_scheduler(self, req):
         popped_element = heapq.heappop(self.dp_workload_status_heap)
         running_reqs, queued_reqs, shortest_queue_worker_rank = popped_element
-        logger.info(f"[hanhan] Popped element: {popped_element}")
+        logger.info(f"[hanhan] bootstrap room: {req.bootstrap_room}, Popped element: {popped_element}")
 
         self.workers[shortest_queue_worker_rank].send_pyobj(req)
 
