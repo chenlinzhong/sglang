@@ -752,6 +752,7 @@ class Scheduler(
             while True:
                 try:
                     recv_req = self.recv_from_tokenizer.recv_pyobj(zmq.NOBLOCK)
+                    logger.info(f"[hanhan] recv_req bootstrap room: {recv_req.bootstrap_room}")
                 except zmq.ZMQError:
                     break
                 recv_reqs.append(recv_req)
@@ -822,6 +823,7 @@ class Scheduler(
                 continue
 
             output = self._request_dispatcher(recv_req)
+            logger.info(f"[hanhan] output: {output}")
             if output is not None:
                 if isinstance(output, RpcReqOutput):
                     if self.recv_from_rpc is not None:
