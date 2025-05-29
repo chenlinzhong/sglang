@@ -246,6 +246,7 @@ _counter_lock = asyncio.Lock()
 bootstrap_room_counter = 0
 
 async def _generate_next_bootstrap_room():
+    global bootstrap_room_counter
     async with _counter_lock:
         room = bootstrap_room_counter
         bootstrap_room_counter = (bootstrap_room_counter + 1) % (2**63)
