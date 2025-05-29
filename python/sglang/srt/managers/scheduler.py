@@ -752,7 +752,7 @@ class Scheduler(
             while True:
                 try:
                     recv_req = self.recv_from_tokenizer.recv_pyobj(zmq.NOBLOCK)
-                    logger.info(f"[hanhan] recv_req bootstrap room: {recv_req.bootstrap_room}")
+                    logger.info(f"[hanhan] req id: {recv_req.rid} recv_req bootstrap room: {recv_req.bootstrap_room}")
                 except zmq.ZMQError:
                     break
                 recv_reqs.append(recv_req)

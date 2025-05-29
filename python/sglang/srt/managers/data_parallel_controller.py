@@ -298,11 +298,11 @@ class DataParallelController:
         else:
             counter = req.bootstrap_room % len(self.workers)
             self.workers[counter].send_pyobj(req)
-            logger.info(f"[hanhan] bootstrap room: {req.bootstrap_room}, Round robin scheduler: {counter}")
+            logger.info(f"[hanhan] req id: {req.rid}, bootstrap room: {req.bootstrap_room}, Round robin scheduler: {counter}")
 
     def shortest_queue_scheduler(self, req):
         queued_reqs, running_reqs, shortest_queue_worker_rank = heapq.heappop(self.dp_workload_status_heap)
-        logger.info(f"[hanhan] bootstrap room: {req.bootstrap_room}, Popped element: {running_reqs}, {queued_reqs}, {shortest_queue_worker_rank}")
+        logger.info(f"[hanhan] req id: {req.rid}, bootstrap room: {req.bootstrap_room}, Popped element: {running_reqs}, {queued_reqs}, {shortest_queue_worker_rank}")
 
         self.workers[shortest_queue_worker_rank].send_pyobj(req)
 
