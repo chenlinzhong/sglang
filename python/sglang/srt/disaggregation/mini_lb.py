@@ -185,7 +185,7 @@ async def handle_generate_request(request_data: dict):
                 "bootstrap_host": [hostname] * batch_size,
                 "bootstrap_port": [bootstrap_port] * batch_size,
                 "bootstrap_room": [
-                    (await _generate_next_bootstrap_room() if neat_room else _generate_bootstrap_room()) for _ in range(batch_size)
+                    (await _generate_next_bootstrap_room(prefill_server) if neat_room else _generate_bootstrap_room()) for _ in range(batch_size)
                 ],
             }
         )
@@ -194,7 +194,7 @@ async def handle_generate_request(request_data: dict):
             {
                 "bootstrap_host": hostname,
                 "bootstrap_port": bootstrap_port,
-                "bootstrap_room": await _generate_next_bootstrap_room() if neat_room else _generate_bootstrap_room(),
+                "bootstrap_room": await _generate_next_bootstrap_room(prefill_server) if neat_room else _generate_bootstrap_room(),
             }
         )
 
@@ -223,7 +223,7 @@ async def handle_completion_request(request_data: dict, request: Request):
         {
             "bootstrap_host": hostname,
             "bootstrap_port": bootstrap_port,
-            "bootstrap_room": await _generate_next_bootstrap_room() if neat_room else _generate_bootstrap_room(),
+            "bootstrap_room": await _generate_next_bootstrap_room(prefill_server) if neat_room else _generate_bootstrap_room(),
         }
     )
 
@@ -243,14 +243,20 @@ async def handle_completion_request(request_data: dict, request: Request):
         )
 
 _counter_lock = asyncio.Lock()
-bootstrap_room_counter = 0
+bootstrap_room_counters = {}
+MAX_ROOMS_PER_SERVER = 2**32  # Each server gets 2^32 rooms
 
-async def _generate_next_bootstrap_room():
-    global bootstrap_room_counter
+async def _generate_next_bootstrap_room(prefill_url: str):
+    global bootstrap_room_counters
     async with _counter_lock:
-        room = bootstrap_room_counter
-        bootstrap_room_counter = (bootstrap_room_counter + 1) % (2**63)
-        print(f"[hanhan] mini lb bootstrap room: {room}")
+        if prefill_url not in bootstrap_room_counters:
+            # For two prefill servers, first one starts at 0, second one starts at 2^32
+            server_index = len(bootstrap_room_counters)
+            bootstrap_room_counters[prefill_url] = server_index * MAX_ROOMS_PER_SERVER
+        
+        room = bootstrap_room_counters[prefill_url]
+        bootstrap_room_counters[prefill_url] = (bootstrap_room_counters[prefill_url] + 1) % (2**63)
+        print(f"[hanhan] mini lb bootstrap room for {prefill_url}: {room}")
         return room
 
 
