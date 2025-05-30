@@ -823,7 +823,7 @@ class Scheduler(
                 continue
 
             output = self._request_dispatcher(recv_req)
-            logger.info(f"[hanhan] output: {output}")
+            # logger.info(f"[hanhan] output: {output}")
             if output is not None:
                 if isinstance(output, RpcReqOutput):
                     if self.recv_from_rpc is not None:
