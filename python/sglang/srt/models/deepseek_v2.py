@@ -258,7 +258,7 @@ class DeepseekV2MoE(nn.Module):
             if global_server_args_dict["enable_deepep_moe"]
             else (EPMoE if global_server_args_dict["enable_ep_moe"] else FusedMoE)
         )
-
+    
         self.experts = MoEImpl(
             num_experts=config.n_routed_experts
             + self.n_share_experts_fusion
@@ -349,6 +349,7 @@ class DeepseekV2MoE(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, forward_batch: Optional[ForwardBatch] = None
     ) -> torch.Tensor:
+        print("~~~~~~~~~~~hi moe hit")
         if not global_server_args_dict["enable_deepep_moe"]:
             return self.forward_normal(hidden_states)
         else:

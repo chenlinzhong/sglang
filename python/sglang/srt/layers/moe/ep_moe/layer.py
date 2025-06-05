@@ -142,6 +142,7 @@ class EPMoE(torch.nn.Module):
 
 
     """
+    import traceback
 
     def __init__(
         self,
@@ -251,6 +252,10 @@ class EPMoE(torch.nn.Module):
                 layer_id=self.layer_id,
             ),
         )
+        print("---- Call Stack for DeepEPMoE.forward ----")
+        traceback.print_stack()
+        print("-----------------------------------------")
+        print(f"Received topk_idx shape: {topk_idx.shape}, topk_weights shape: {topk_weights.shape}")
 
         reorder_topk_ids, src2dst, seg_indptr = run_moe_ep_preproess(
             topk_ids, self.num_experts
@@ -840,7 +845,6 @@ class DeepEPMoE(EPMoE):
     """
     MoE Expert Parallel Impl based on DeepEP (https://github.com/deepseek-ai/DeepEP/tree/main)
     """
-
     _has_printed = False
 
     def __init__(
@@ -911,6 +915,10 @@ class DeepEPMoE(EPMoE):
         num_recv_tokens_per_expert: List[int],
         forward_mode: ForwardMode,
     ):
+        # print("---- Call Stack for DeepEPMoE.forward ----")
+        # traceback.print_stack()
+        # print("-----------------------------------------")
+        # print(f"Received topk_idx shape: {topk_idx.shape}, topk_weights shape: {topk_weights.shape}")
         resolved_deepep_mode = self.deepep_mode.resolve(forward_mode)
         if resolved_deepep_mode == DeepEPMode.normal:
             if _enable_jit_deepgemm:
