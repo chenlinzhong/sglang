@@ -142,11 +142,7 @@ def _topk_ids_logical_to_physical_workload_based(
 
     per_expert_cursors = [0] * E
     token_chunks, phys_chunks = [], []
-    # map key: expert id, value: token indices
-    # [2,3,4,5,6,7,8]
-    # map expert_id, gpu; number of tokens
-    # token index -> physical idx
-    # for each gpu, assign exact number of tokens to the expert copy according to y
+    
     for g in range(G):
         # Which logical experts e send >=1 token to GPU g?
         col = torch.tensor(y_np[:, g], device=device)
@@ -169,7 +165,7 @@ def _topk_ids_logical_to_physical_workload_based(
             idx_list = e_to_index[e]
             tok_indices = token_pos_per_e[idx_list][cursor:end]  # shape (quota,)
 
-            # Look up the correct physical ID (int32) for expert e on GPU g
+            # Look up the correct physical ID for expert e on GPU g
             phys_id = lookup_phys_id[e, g].item()
             assert phys_id >= 0, f"No physical replica of expert {e} on GPU {g}"
 
@@ -178,17 +174,12 @@ def _topk_ids_logical_to_physical_workload_based(
             token_chunks.append(tok_indices)   # (quota,)
             phys_chunks.append(phys_tensor)    # (quota,)
 
-    # 8. Concatenate all and scatter into flat_physical
     if token_chunks:
         all_tokens = torch.cat(token_chunks)  # shape (total_assigned_tokens,)
         all_phys = torch.cat(phys_chunks)     # same shape
-        # all_tokens must be long for indexing
         all_tokens = all_tokens.to(dtype=torch.long)
-
-        # Now assign
         flat_physical[all_tokens] = all_phys
 
-    # 9. Reshape back to (N, K) if needed (here we assume input was flattened)
     return flat_physical.view_as(topk_ids)
 
     # # assemble final token-level mapping 
