@@ -114,7 +114,7 @@ class HPKVClient:
             raise AssertionError("remote_url is None")
 
         endpoint = remote_url[len("eic://") :]
-        raddr, rport = endpoint.split(":")
+        raddr, rport = endpoint.split("-")
         rport = int(rport)
         laddr = config.get("local_addr", None)
         lport = config.get("local_port", 0)

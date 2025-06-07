@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # 测试配置
 CONFIG_YAML = """
-remote_url: eic://127.0.0.1:18512
+remote_url: eic://fdbd:dc0c:2:726::14-18512
 local_addr: 127.0.0.1
 local_port: 0
 eic_instance_id: test_instance
