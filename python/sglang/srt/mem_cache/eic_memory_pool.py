@@ -300,9 +300,21 @@ class EICBaseTokenToKVPoolHost:
             for index in indices.to("cpu").tolist()
         ]
 
-    def _get_host_ip(self):
+    def _get_host_ip():
         import socket
-        return socket.gethostbyname(socket.gethostname())
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except socket.gaierror:
+            # Fallback options
+            try:
+                # Try getting IP by connecting to a dummy address
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))  # Google DNS
+                ip = s.getsockname()[0]
+                s.close()
+                return ip
+            except:
+                return "127.0.0.1"  # Ultimate fallback to localhost
 
     def _get_deploy_info(self):
         model_path = self.extra_info.get("model_path", "fake_model_path")
