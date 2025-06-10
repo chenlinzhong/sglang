@@ -145,8 +145,8 @@ class RadixCache(BasePrefixCache):
 
             logger.debug(
                 f"nodeid:{node.id},"
-                f"page_size:{self.page_size},"
                 f"parentid:{parent_id_str},"
+                f"page_size:{self.page_size},"
                 f"key:{node.key if node.key else 'None'},"
                 f"value:{node.value.tolist() if isinstance(node.value, torch.Tensor) else node.value},"
                 f"host_value:{node.host_value.tolist() if isinstance(node.host_value, torch.Tensor) else node.host_value},"
