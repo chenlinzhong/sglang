@@ -4,7 +4,7 @@ import threading
 import time
 from typing import List, Optional, Tuple
 
-import hpkv
+import pris
 import torch
 import yaml
 
@@ -22,19 +22,18 @@ TensorPoolSize = 1024
 
 REMOTE_EIC_YAML_ENV_VAR = "REMOTE_EIC_YAML"
 
-# GPU Direct RDMA for kv set
+# GPU direct RDMA for KV set
 G_EnableKVSetGPUDirect = False
 
-# GPU Direct RDMA for kv get
+# GPU direct RDMA for KV get
 G_EnableKVGetGPUDirect = True
 
 
 class FlexibleKVCacheMemoryPool:
-    def __init__(self, client, device: str, kv_cache_shape, kv_cache_dtype):
+    def __init__(self, client: pris.PrisClient, device: str, kv_cache_shape, kv_cache_dtype):
         self._init = False
-        self.client = client  # Using HPKVTensorClient instead of eic.Client
-        self.device = device if G_EnableKVGetGPUDirect else "cpu"
-
+        self.client = client
+        self.device = device
         """ (num_layer, 2, chunk_size, num_kv_head, head_size) """
         self.kv_cache_shape = kv_cache_shape
         self.kv_cache_dtype = kv_cache_dtype
@@ -47,18 +46,21 @@ class FlexibleKVCacheMemoryPool:
             device=device,
         )
         self.kv_cache_idx = 0
-
         self.kv_cache_numel = 1
         for i in self.kv_cache_shape:
             self.kv_cache_numel *= i
 
-        # Register memory with HPKVClient
-        self.reg_buf_bytes = self.mempool.numel() * self.mempool.element_size()
-        self.reg = self.client.reg_memory(self.mempool.data_ptr(), self.reg_buf_bytes)
-        self.sgl = hpkv.SGL(self.mempool.data_ptr(), self.reg_buf_bytes, self.reg)
+        # Register memory with PrisClient
+        self.mr_mem = self.client.reg_memory(
+            self.mempool.data_ptr(),
+            self.mempool.numel() * self.mempool.element_size()
+        )
+        if self.mr_mem == 0:
+            logger.error("Failed to register memory with PrisClient")
+            exit(1)
 
         logger.info(
-            f"register memory pool shape {self.kv_cache_shape}, dtype {self.kv_cache_dtype}, "
+            f"Registered memory pool shape {self.kv_cache_shape}, dtype {self.kv_cache_dtype}, "
             f"kv_cache_num {self.max_kv_cache_num}, device {device}, "
             f"total_size {self.max_kv_cache_num * (self.mempool[0].numel() * self.mempool[0].element_size())}"
         )
@@ -66,14 +68,14 @@ class FlexibleKVCacheMemoryPool:
     def try_allocate_kv_cache(self, shape, dtype, count=1):
         if self.kv_cache_dtype != dtype or self.kv_cache_shape != shape:
             logger.error(
-                f"allocate from mempool failed, self.kv_cache_shape {self.kv_cache_shape}, "
+                f"Allocate from mempool failed, self.kv_cache_shape {self.kv_cache_shape}, "
                 f"dtype {self.kv_cache_dtype}, require shape {shape}, dtype {dtype}"
             )
             return None
 
         if count > self.max_kv_cache_num:
             logger.error(
-                f"allocate from mempool failed, self.kv_cache_shape {self.kv_cache_shape}, "
+                f"Allocate from mempool failed, self.kv_cache_shape {self.kv_cache_shape}, "
                 f"dtype {self.kv_cache_dtype}, require count {count}, max_kv_cache_num {self.max_kv_cache_num}"
             )
             return None
@@ -85,157 +87,141 @@ class FlexibleKVCacheMemoryPool:
         self.kv_cache_idx = (self.kv_cache_idx + count) % self.max_kv_cache_num
         return ret
 
-    def __del__(self):
-        self.client.dereg_memory(self.reg)
 
-
-class HPKVClient:
+class PrisKVClient:
     """
-    The remote url should start with "eic://" and only have one host-port pair
+    The remote address and port are loaded from a YAML file, supporting environment variable override.
     """
 
     def __init__(self, endpoint: str, kv_cache_dtype, kv_cache_shape, device="cpu"):
-        if os.environ.get(REMOTE_EIC_YAML_ENV_VAR) is not None:
-            logger.info(f"hpkv init with env var {REMOTE_EIC_YAML_ENV_VAR}")
-            config_file = os.environ.get(REMOTE_EIC_YAML_ENV_VAR)
-        else:
-            config_file = "/sgl-workspace/config/remote-eic.yaml"
-            logger.info(f"hpkv init with default config, config_file {config_file}")
-
+        config_file = os.environ.get(REMOTE_EIC_YAML_ENV_VAR, "/sgl-workspace/config/remote-eic.yaml")
         if not os.path.exists(config_file):
-            logger.error(f"config file {config_file} not exists")
+            logger.error(f"Config file {config_file} does not exist")
             exit(1)
 
         with open(config_file, "r") as fin:
             config = yaml.safe_load(fin)
 
-        remote_url = config.get("remote_url", None)
-        if remote_url is None:
-            raise AssertionError("remote_url is None")
+        raddr = config.get("remote_addr", "127.0.0.1")
+        rport = config.get("remote_port", 6379)
+        logger.info(f"Pris remote_addr: {raddr}, remote_port: {rport}")
 
-        endpoint = remote_url[len("eic://") :]
-        raddr, rport = endpoint.split("-")
-        rport = int(rport)
-        laddr = config.get("local_addr", None)
-        lport = config.get("local_port", 0)
-
-        logger.info(f"hpkv remote_url: {remote_url}, endpoint: {endpoint}")
-
-        eic_instance_id = config.get("eic_instance_id", None)
-        logger.info(f"hpkv instance_id: {eic_instance_id}")
-
-        eic_log_dir = config.get("eic_log_dir", None)
-        logger.info(f"hpkv log_dir: {eic_log_dir}")
-
-        eic_log_level = config.get("eic_log_level", 2)
-        logger.info(f"hpkv log_level: {eic_log_level}")
-
-        if not os.path.exists(eic_log_dir) and not os.path.isdir(eic_log_dir):
-            os.makedirs(eic_log_dir, exist_ok=True)
-
-        self.client = hpkv.HPKVTensorClient(raddr, rport, laddr, lport, 1)
-        if not self.client:
-            logger.error("fail to init hpkv client")
-            exit(1)
-
+        self.client = pris.PrisClient(raddr, rport)
         self.device = device
         self.kv_cache_shape = kv_cache_shape
         self.kv_cache_dtype = kv_cache_dtype
         self.kv_cache_mem_pool = FlexibleKVCacheMemoryPool(
             self.client,
-            self.device if G_EnableKVGetGPUDirect else "cpu",
-            self.kv_cache_shape,
-            self.kv_cache_dtype,
+            device if G_EnableKVGetGPUDirect else "cpu",
+            kv_cache_shape,
+            kv_cache_dtype,
         )
         self.kv_cache_write_mem_pool = FlexibleKVCacheMemoryPool(
             self.client,
-            self.device if G_EnableKVSetGPUDirect else "cpu",
-            self.kv_cache_shape,
-            self.kv_cache_dtype,
+            device if G_EnableKVSetGPUDirect else "cpu",
+            kv_cache_shape,
+            kv_cache_dtype,
         )
 
-    def __del__(self):
-        self.client.close()
-
     def exists(self, key: str) -> bool:
-        logger.debug(f"hpkv exists {key}")
-        ret = self.client.test(key)
-        if ret:
-            logger.debug(f"hpkv exists {key} success")
-        else:
-            logger.debug(f"hpkv exists {key} failed")
-        return ret
+        logger.debug(f"Pris exists {key}")
+        return self.client.exist(key)
 
     def exists_batch(self, keys: List[str]) -> List[bool]:
-        logger.debug(f"hpkv exists {len(keys)}")
-        res = []
-        for key in keys:
-            ret = self.client.test(key)
-            res.append(ret)
-            if not ret:
-                logger.debug(f"hpkv exists {key} failed")
-        return res
+        logger.debug(f"Pris exists {len(keys)}")
+        status, exists = self.client.mexist(keys)
+        if status != 0:
+            logger.error(f"Pris mexist {len(keys)} failed, status {status}")
+            return [False] * len(keys)
+        return [length > 0 for length in exists]
 
     def get(self, keys: List[str]) -> Optional[torch.Tensor]:
-        logger.debug(f"hpkv get {keys}")
+        logger.debug(f"Pris get {keys}")
         get_data_start_time = time.perf_counter()
-        objs = []
 
-        for key in keys:
+        # Generate data keys and SGLs
+        objs = []
+        sgls = []
+        for i, key in enumerate(keys):
             dtype = self.kv_cache_dtype
             shape = self.kv_cache_shape
-            logger.debug(f"get tensor shape {shape}, dtype {dtype}")
+            logger.debug(f"Get tensor shape {shape}, dtype {dtype}")
 
             item = self.kv_cache_mem_pool.try_allocate_kv_cache(shape, dtype)
             if item is None:
                 obj = torch.empty(shape, dtype=dtype, device="cpu")
-                logger.error("can not allocate tensor from pool")
+                logger.error("Cannot allocate tensor from pool")
             else:
                 obj = item
-            ret = self.client.get(key, obj)
-            if ret != 0:
-                logger.error(f"hpkv get {key} failed, ret {ret}")
-                return None
-            logger.debug(f"hpkv get data {key} success")
             objs.append(obj)
+            sgls.append(pris.SGL(
+                obj.data_ptr(),
+                obj.element_size() * obj.numel(),
+                self.kv_cache_mem_pool.mr_mem
+            ))
+
+        # Get data
+        status, lengths = self.client.mget(keys, sgls)
+        if status != 0:
+            logger.error(f"Pris mget {keys} failed, status {status}")
+            return None
 
         get_data_end_time = time.perf_counter()
         get_data_execution_time = (get_data_end_time - get_data_start_time) * 1e6
-        logger.debug(f"hpkv get {keys} data cost %.2f ms", get_data_execution_time * 1e3)
+        logger.debug(f"Pris get {keys} data cost %.2f us", get_data_execution_time)
 
-        return objs
+        return torch.stack(objs)
 
-    def batch_get(self, keys: List[str]) -> Tuple[Optional[torch.Tensor], Optional[List[bool]]]:
-        logger.debug(f"hpkv get {len(keys)}")
+    def batch_get(
+        self, keys: List[str]
+    ) -> Tuple[Optional[torch.Tensor], Optional[List[bool]]]:
+        logger.debug(f"Pris get {len(keys)}")
         get_data_start_time = time.perf_counter()
+
+        # Generate data keys and SGLs
         count = len(keys)
         success_mask = [True for _ in range(count)]
-        objs = self.kv_cache_mem_pool.try_allocate_kv_cache(
+        items = self.kv_cache_mem_pool.try_allocate_kv_cache(
             self.kv_cache_shape, self.kv_cache_dtype, count
         )
-        if objs is None:
+        if items is None:
             objs = torch.empty(
                 (count,) + self.kv_cache_shape, dtype=self.kv_cache_dtype, device="cpu"
             )
-            logger.error("can not allocate tensor from pool")
+            logger.error("Cannot allocate tensor from pool")
+        else:
+            objs = items
 
-        for i, key in enumerate(keys):
-            ret = self.client.get(key, objs[i])
-            if ret != 0:
-                logger.error(f"hpkv get data {key} failed, ret {ret}")
-                success_mask[i] = False
+        sgls = []
+        for i in range(count):
+            sgls.append(pris.SGL(
+                objs[i].data_ptr(),
+                objs[i].element_size() * objs[i].numel(),
+                self.kv_cache_mem_pool.mr_mem
+            ))
+
+        # Get data
+        status, lengths = self.client.mget(keys, sgls)
+        if status != 0:
+            if status == 1:  # Assuming 1 is partial failure, similar to EIC's PARTIAL_FAILED
+                for i, length in enumerate(lengths):
+                    if length > 0:
+                        logger.debug(f"Pris get data {keys[i]} success")
+                    else:
+                        logger.error(f"Pris get data {keys[i]} failed, length {length}")
+                        success_mask[i] = False
             else:
-                logger.debug(f"hpkv get data {key} success")
-
+                logger.error(f"Pris mget {len(keys)} keys failed, status {status}")
+                return None, []
+        
         get_data_end_time = time.perf_counter()
         get_data_execution_time = (get_data_end_time - get_data_start_time) * 1e6
-        logger.debug(f"hpkv get {count} keys data cost %.2f us", get_data_execution_time)
+        logger.debug(f"Pris get {count} keys data cost %.2f us", get_data_execution_time)
         return objs, success_mask
 
     def set(self, keys: List[str], obj_inputs: torch.Tensor) -> bool:
-        logger.debug(f"hpkv set {len(keys)} keys")
+        logger.debug(f"Pris set {len(keys)} keys")
         count = len(keys)
-
         items = self.kv_cache_write_mem_pool.try_allocate_kv_cache(
             self.kv_cache_shape, self.kv_cache_dtype, count
         )
@@ -243,22 +229,29 @@ class HPKVClient:
             objs = torch.empty(
                 (count,) + self.kv_cache_shape, dtype=self.kv_cache_dtype, device="cpu"
             )
-            logger.error("can not allocate tensor from pool")
+            logger.error("Cannot allocate tensor from pool")
         else:
             objs = items
 
-        success = True
+        sgls = []
         for i, key in enumerate(keys):
             temp = objs[i].reshape(obj_inputs[i].shape).contiguous()
             temp.copy_(obj_inputs[i])
-            ret = self.client.set(key, temp)
-            if ret != 0:
-                logger.error(f"hpkv set {key} failed, ret {ret}")
-                success = False
-            else:
-                logger.debug(f"hpkv set {key} success")
+            if not G_EnableKVSetGPUDirect:
+                temp = temp.cpu()
+            sgls.append(pris.SGL(
+                temp.data_ptr(),
+                temp.element_size() * temp.numel(),
+                self.kv_cache_write_mem_pool.mr_mem
+            ))
 
-        return success
+        # Set data
+        status = self.client.mset(keys, sgls)
+        if status != 0:
+            logger.error(f"Pris mset {len(keys)} failed, status {status}")
+            return False
+        logger.debug(f"Pris mset {len(keys)} success")
+        return True
 
 
 class EICBaseTokenToKVPoolHost:
@@ -284,13 +277,17 @@ class EICBaseTokenToKVPoolHost:
             self.size = int(device_pool.size * host_to_device_ratio)
         self.size = self.size - (self.size % self.page_size)
 
+        # Initialize memory states and tracking structures
         self.mem_state = torch.zeros(
             (self.size,), dtype=torch.uint8, device=self.device
         )
         self.free_slots = torch.arange(self.size, dtype=torch.int32)
         self.can_use_mem_size = self.size
+
+        # A lock for synchronized operations
         self.lock = threading.RLock()
         self.debug = logger.isEnabledFor(logging.DEBUG)
+
         self.rank = rank
         self.host_ip = self._get_host_ip()
         self.split_dim = 2
@@ -320,7 +317,7 @@ class EICBaseTokenToKVPoolHost:
         return [f"{content_hash}@{self.deploy_key}" for content_hash in content_hashs]
 
     def get_flat_data(self, indices) -> Tuple[Optional[torch.Tensor], List[bool]]:
-        logger.debug(f"get_flat_data indices {indices}")
+        logger.debug(f"Get flat data indices {indices}")
         keys = self._encode_key_exclusive(indices)
         bs = TensorPoolSize
         ret = []
@@ -328,9 +325,9 @@ class EICBaseTokenToKVPoolHost:
 
         for i in range(0, len(keys), bs):
             key = keys[i : i + bs]
-            objs, success_mask = self.eic_client.batch_get(key)
+            objs, success_mask = self.pris_client.batch_get(key)
             if objs is None:
-                logger.error(f"get_flat_data keys {key} failed, hpkv_client return none")
+                logger.error(f"Get flat data keys {key} failed, pris_client returned None")
                 return None, []
             copy_objs = objs.clone()
             ret.extend([copy_objs[i] for i in range(copy_objs.shape[0])])
@@ -338,7 +335,7 @@ class EICBaseTokenToKVPoolHost:
 
         if len(ret) == 0:
             logger.error(
-                f"get_flat_data keys size {len(keys)} failed, hpkv_client return none, ret {ret}"
+                f"Get flat data keys size {len(keys)} failed, pris_client returned none, ret {ret}"
             )
             return None, []
 
@@ -346,31 +343,28 @@ class EICBaseTokenToKVPoolHost:
         return flat_data, masks
 
     def assign_flat_data(self, indices, flat_data):
-        logger.debug(f"assign_flat_data indices {indices}")
+        logger.debug(f"Assign flat data indices {indices}")
         start_time = time.perf_counter()
 
         keys = self._encode_key_exclusive(indices)
         flat_data = flat_data.contiguous()
-        if not G_EnableKVSetGPUDirect:
-            values = torch.split(flat_data.cpu(), 1, dim=self.split_dim)
-        else:
-            values = torch.split(flat_data, 1, dim=self.split_dim)
+        values = torch.split(flat_data, 1, dim=self.split_dim)
 
         bs = TensorPoolSize
         split_time = time.perf_counter()
         for i in range(0, len(keys), bs):
             key = keys[i : i + bs]
             value = values[i : i + bs]
-            ret = self.eic_client.set(key, value)
+            ret = self.pris_client.set(key, value)
             if not ret:
                 logger.error(
-                    f"assign_flat_data keys {key} failed, hpkv_client return none"
+                    f"Assign flat data keys {key} failed, pris_client returned None"
                 )
                 return False
         cost_time = time.perf_counter() - split_time
         if cost_time > 1:
             logger.warning(
-                f"finish assign flat data, total keys {len(keys)}, split time {split_time - start_time}, transfer time {cost_time}"
+                f"Finish assign flat data, total keys {len(keys)}, split time {split_time - start_time}, transfer time {cost_time}"
             )
         return True
 
@@ -382,7 +376,7 @@ class EICBaseTokenToKVPoolHost:
 
     def exist_page(self, content_hashs):
         keys = self._encode_key_shared(content_hashs)
-        ret = self.eic_client.exists_batch(keys)
+        ret = self.pris_client.exists_batch(keys)
         res = []
         for i, exist in enumerate(ret):
             if exist:
@@ -392,7 +386,7 @@ class EICBaseTokenToKVPoolHost:
         return res
 
     def get_page_data(self, content_hashs):
-        logger.debug(f"get_page_data content_hashs {content_hashs}")
+        logger.debug(f"Get flat data content_hashs {content_hashs}")
         keys = self._encode_key_shared(content_hashs)
         bs = TensorPoolSize
         ret = []
@@ -400,9 +394,9 @@ class EICBaseTokenToKVPoolHost:
 
         for i in range(0, len(keys), bs):
             key = keys[i : i + bs]
-            objs, success_mask = self.eic_client.batch_get(key)
+            objs, success_mask = self.pris_client.batch_get(key)
             if objs is None:
-                logger.error(f"get_page_data keys {key} failed, hpkv_client return none")
+                logger.error(f"Get flat data keys {key} failed, pris_client returned None")
                 return None, []
             copy_objs = objs.clone()
             ret.extend([copy_objs[i] for i in range(copy_objs.shape[0])])
@@ -410,7 +404,7 @@ class EICBaseTokenToKVPoolHost:
 
         if len(ret) == 0:
             logger.error(
-                f"get_page_data keys size {len(keys)} failed, hpkv_client return none, ret {ret}"
+                f"Get flat data keys size {len(keys)} failed, pris_client returned none, ret {ret}"
             )
             return None, []
 
@@ -418,7 +412,7 @@ class EICBaseTokenToKVPoolHost:
         return flat_data, masks
 
     def assign_page_data(self, content_hashs, flat_data):
-        logger.debug(f"assign_page_data hashs {content_hashs}")
+        logger.debug(f"Assign flat data hashs {content_hashs}")
         keys = self._encode_key_shared(content_hashs)
         flat_data = flat_data.contiguous()
         values = torch.split(flat_data, self.page_size, dim=self.split_dim)
@@ -427,12 +421,13 @@ class EICBaseTokenToKVPoolHost:
         for i in range(0, len(keys), bs):
             key = keys[i : i + bs]
             value = values[i : i + bs]
-            ret = self.eic_client.set(key, value)
+            ret = self.pris_client.set(key, value)
             if not ret:
                 logger.error(
-                    f"assign_page_data keys {key} failed, hpkv_client return none"
+                    f"Assign flat data keys {key} failed, pris_client returned None"
                 )
                 return False
+
         return True
 
     @debug_timing
@@ -558,7 +553,7 @@ class EICMHATokenToKVPoolHost(EICBaseTokenToKVPoolHost):
             self.head_num,
             self.head_dim,
         )
-        self.eic_client = HPKVClient(
+        self.pris_client = PrisKVClient(
             None, self.dtype, self.kvcache_shape, device_pool.device
         )
 
@@ -595,7 +590,7 @@ class EICMLATokenToKVPoolHost(EICBaseTokenToKVPoolHost):
             1,
             self.kv_lora_rank + self.qk_rope_head_dim,
         )
-        self.eic_client = HPKVClient(
+        self.pris_client = PrisKVClient(
             None, self.dtype, self.kvcache_shape, device_pool.device
         )
         self.split_dim = 1
