@@ -106,7 +106,7 @@ class PrisKVClient:
         address_part = remote_url.split("://")[1]
         raddr, rport = address_part.split("-")
 
-        self.client = pris.PrisClient(raddr, rport)
+        self.client = pris.PrisClient(raddr, int(rport))
         self.device = device
         self.kv_cache_shape = kv_cache_shape
         self.kv_cache_dtype = kv_cache_dtype
