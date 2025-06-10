@@ -162,6 +162,10 @@ class PrisKVClient:
 
         # Get data
         status, lengths = self.client.mget(keys, sgls)
+        logger.debug("Pris mget操作详情:\n"
+             f"- 总键数量: {len(keys)}\n"
+             f"- 状态码: {status}\n"
+             f"- 完整键列表: {keys}")
         if status != 0:
             logger.error(f"Pris mget {keys} failed, status {status}")
             return None
