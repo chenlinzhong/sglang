@@ -757,6 +757,7 @@ def _wait_and_warmup(
     image_token_text: str,
     launch_callback: Optional[Callable[[], None]] = None,
 ):
+    return 
     headers = {}
     url = server_args.url()
     if server_args.api_key:
