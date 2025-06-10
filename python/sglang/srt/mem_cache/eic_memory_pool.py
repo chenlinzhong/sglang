@@ -247,9 +247,10 @@ class PrisKVClient:
 
         # Set data
         status = self.client.mset(keys, sgls)
-        print("[debug] write to hpkv")
-        print("\n".join(keys))  # 每个 key 单独一行
-        print("status:", status)
+        logger.debug("Pris mset操作详情:\n"
+             f"- 总键数量: {len(keys)}\n"
+             f"- 状态码: {status}\n"
+             f"- 完整键列表: {keys}")
         if status != 0:
             logger.error(f"Pris mset {len(keys)} failed, status {status}")
             return False
