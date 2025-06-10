@@ -76,12 +76,12 @@ class TreeNode:
         return (
             f"TreeNode(id={self.id}, "
             f"key={self.key}, "
-            f"value={'...' if self.value else 'None'}, "
+            f"value={self.value}, "
             f"lock_ref={self.lock_ref}, "
             f"access_time={self.last_access_time:.2f}, "
             f"hit_count={self.hit_count}, "
             f"loading={self.loading}, "
-            f"host_value={bool(self.host_value)}, "
+            f"host_value={self.host_value}, "
             f"content_hash={self.content_hash})"
         )
 
