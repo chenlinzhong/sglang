@@ -26,7 +26,7 @@ REMOTE_EIC_YAML_ENV_VAR = "REMOTE_EIC_YAML"
 G_EnableKVSetGPUDirect = False
 
 # GPU direct RDMA for KV get
-G_EnableKVGetGPUDirect = True
+G_EnableKVGetGPUDirect = False
 
 
 class FlexibleKVCacheMemoryPool:
@@ -102,9 +102,9 @@ class PrisKVClient:
         with open(config_file, "r") as fin:
             config = yaml.safe_load(fin)
 
-        raddr = config.get("remote_addr", "127.0.0.1")
-        rport = config.get("remote_port", 6379)
-        logger.info(f"Pris remote_addr: {raddr}, remote_port: {rport}")
+        remote_url = config.get("remote_url", "hpkv://127.0.0.1-6379")
+        address_part = remote_url.split("://")[1]
+        raddr, rport = address_part.split("-")
 
         self.client = pris.PrisClient(raddr, rport)
         self.device = device
