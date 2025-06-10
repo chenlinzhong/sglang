@@ -18,7 +18,7 @@ from sglang.srt.mem_cache.memory_pool import (
 )
 
 logger = logging.getLogger(__name__)
-TensorPoolSize = 1024
+TensorPoolSize = 10240
 
 REMOTE_EIC_YAML_ENV_VAR = "REMOTE_EIC_YAML"
 
@@ -149,8 +149,8 @@ class PrisKVClient:
 
             item = self.kv_cache_mem_pool.try_allocate_kv_cache(shape, dtype)
             if item is None:
-                obj = torch.empty(shape, dtype=dtype, device="cpu")
-                logger.error("Cannot allocate tensor from pool")
+                logger.error("Cannot allocate tensor from FlexibleKVCacheMemoryPool")
+                return None
             else:
                 obj = item
             objs.append(obj)
@@ -189,10 +189,8 @@ class PrisKVClient:
             self.kv_cache_shape, self.kv_cache_dtype, count
         )
         if items is None:
-            objs = torch.empty(
-                (count,) + self.kv_cache_shape, dtype=self.kv_cache_dtype, device="cpu"
-            )
-            logger.error("Cannot allocate tensor from pool")
+            logger.error("Cannot allocate tensor from FlexibleKVCacheMemoryPool")
+            return None, []
         else:
             objs = items
 
@@ -230,10 +228,8 @@ class PrisKVClient:
             self.kv_cache_shape, self.kv_cache_dtype, count
         )
         if items is None:
-            objs = torch.empty(
-                (count,) + self.kv_cache_shape, dtype=self.kv_cache_dtype, device="cpu"
-            )
-            logger.error("Cannot allocate tensor from pool")
+            logger.error("Cannot allocate tensor from FlexibleKVCacheMemoryPool")
+            return False
         else:
             objs = items
 
