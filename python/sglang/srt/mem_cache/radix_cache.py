@@ -78,7 +78,7 @@ class TreeNode:
             f"key={self.key}, "
             f"value={self.value}, "
             f"lock_ref={self.lock_ref}, "
-            f"access_time={self.last_access_time:.2f}, "
+            f"access_time={self.last_access_time}, "
             f"hit_count={self.hit_count}, "
             f"loading={self.loading}, "
             f"host_value={self.host_value}, "
@@ -145,6 +145,7 @@ class RadixCache(BasePrefixCache):
 
             logger.debug(
                 f"nodeid:{node.id},"
+                f"page_size:{self.page_size},"
                 f"parentid:{parent_id_str},"
                 f"key:{node.key if node.key else 'None'},"
                 f"value:{node.value.tolist() if isinstance(node.value, torch.Tensor) else node.value},"
