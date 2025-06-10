@@ -34,6 +34,8 @@ from sglang.srt.mem_cache.memory_pool import ReqToTokenPool, TokenToKVPoolAlloca
 if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req
 
+import logging
+logger = logging.getLogger(__name__)
 
 class TreeNode:
 
@@ -68,6 +70,20 @@ class TreeNode:
 
     def __lt__(self, other: "TreeNode"):
         return self.last_access_time < other.last_access_time
+    
+    def __str__(self):
+        """标准化日志输出的字符串格式"""
+        return (
+            f"TreeNode(id={self.id}, "
+            f"key={self.key}, "
+            f"value={'...' if self.value else 'None'}, "
+            f"lock_ref={self.lock_ref}, "
+            f"access_time={self.last_access_time:.2f}, "
+            f"hit_count={self.hit_count}, "
+            f"loading={self.loading}, "
+            f"host_value={bool(self.host_value)}, "
+            f"content_hash={self.content_hash})"
+        )
 
 
 def _key_match_page_size1(key0: List, key1: List):
@@ -116,6 +132,34 @@ class RadixCache(BasePrefixCache):
             self.key_match_fn = partial(_key_match_paged, page_size=page_size)
             self.get_child_key_fn = lambda key: tuple(key[:page_size])
         self.reset()
+
+    
+    #only for debug
+    def print_tree_nodes(self):
+        """Print all nodes in the tree with detailed information in the specified format."""
+        def _print_node_info(node: TreeNode, parent_id: Optional[int] = None):
+            if node == self.root_node:
+                parent_id_str = "None"
+            else:
+                parent_id_str = str(node.parent.id) if node.parent else "None"
+
+            logger.debug(
+                f"nodeid:{node.id},"
+                f"parentid:{parent_id_str},"
+                f"key:{node.key if node.key else 'None'},"
+                f"value:{node.value.tolist() if isinstance(node.value, torch.Tensor) else node.value},"
+                f"host_value:{node.host_value.tolist() if isinstance(node.host_value, torch.Tensor) else node.host_value},"
+                f"evicted:{node.evicted}"
+            )
+
+        # Use BFS to traverse the tree
+        from collections import deque
+        queue = deque([self.root_node])
+        while queue:
+            current_node = queue.popleft()
+            _print_node_info(current_node)
+            for child in current_node.children.values():
+                queue.append(child)
 
     ##### Public API #####
 
@@ -228,6 +272,11 @@ class RadixCache(BasePrefixCache):
 
         # The prefix indices could be updated, reuse it
         new_indices, new_last_node = self.match_prefix(page_aligned_token_ids)
+        logger.debug(f"page_aligned_token_ids:{page_aligned_token_ids}")
+        logger.debug(f"new_indices:{new_indices}")
+        logger.debug(f"new_last_node:{new_last_node}")
+        self.print_tree_nodes()
+
         self.req_to_token_pool.write(
             (req.req_pool_idx, slice(len(req.prefix_indices), len(new_indices))),
             new_indices[len(req.prefix_indices) :],
