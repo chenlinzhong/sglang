@@ -301,8 +301,9 @@ class EICBaseTokenToKVPoolHost:
         ]
 
     def _get_host_ip(self):
-        import socket
-        return socket.gethostbyname(socket.gethostname())
+        return "127.0.0.1"
+        # import socket
+        # return socket.gethostbyname(socket.gethostname())
 
     def _get_deploy_info(self):
         model_path = self.extra_info.get("model_path", "fake_model_path")
