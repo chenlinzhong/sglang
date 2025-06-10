@@ -246,9 +246,8 @@ class PrisKVClient:
             ))
 
         # Set data
-        print("start  write to hpkv", keys, sgls)
         status = self.client.mset(keys, sgls)
-        print("end write  to hpkv", keys, sgls, status)
+        print("write to hpkv", keys, status)
         if status != 0:
             logger.error(f"Pris mset {len(keys)} failed, status {status}")
             return False
