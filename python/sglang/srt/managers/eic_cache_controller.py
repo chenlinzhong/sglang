@@ -239,7 +239,7 @@ class EICCacheController(HiCacheController):
         """
         with torch.cuda.stream(self.write_stream):
             while not self.stop_event.is_set():
-                logger.debug("wirte thread eventloop running")
+                #logger.debug("wirte thread eventloop running")
                 try:
                     operation = self.write_queue.get(block=True, timeout=1)
                     if self.write_policy == "write_through":
@@ -257,7 +257,7 @@ class EICCacheController(HiCacheController):
         torch.cuda.current_stream().synchronize()
         with torch.cuda.stream(self.load_stream):
             while not self.stop_event.is_set():
-                logger.debug("load thread eventloop running")
+                #logger.debug("load thread eventloop running")
                 # self.load_cache_event.wait(timeout=1)
                 # if not self.load_cache_event.is_set():
                 #     continue
