@@ -162,6 +162,8 @@ class PrisKVClient:
 
         # Get data
         status, lengths = self.client.mget(keys, sgls)
+        get_data_end_time = time.perf_counter()
+        get_data_execution_time = (get_data_end_time - get_data_start_time) * 1e6
         logger.debug("Pris mget操作详情:\n"
              f"- 总键数量: {len(keys)}\n"
              f"- 状态码: {status}\n"
@@ -169,10 +171,7 @@ class PrisKVClient:
         if status != 0:
             logger.error(f"Pris mget {keys} failed, status {status}")
             return None
-
-        get_data_end_time = time.perf_counter()
-        get_data_execution_time = (get_data_end_time - get_data_start_time) * 1e6
-        logger.info(f"Pris mset | keys={len(keys)} | shapes={self.kv_cache_shape} | status={status} | time={get_data_execution_time:.2f}µs")
+        logger.info(f"Pris mget | keys={len(keys)} | shapes={self.kv_cache_shape} | status={status} | time={get_data_execution_time:.2f}µs")
         return torch.stack(objs)
 
     def batch_get(
