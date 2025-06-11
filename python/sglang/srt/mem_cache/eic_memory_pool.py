@@ -172,8 +172,7 @@ class PrisKVClient:
 
         get_data_end_time = time.perf_counter()
         get_data_execution_time = (get_data_end_time - get_data_start_time) * 1e6
-        logger.debug(f"Pris get {keys} data cost %.2f us", get_data_execution_time)
-
+        logger.info(f"Pris mset | keys={len(keys)} | shapes={self.kv_cache_shape} | status={status} | time={get_data_execution_time:.2f}µs")
         return torch.stack(objs)
 
     def batch_get(
@@ -222,6 +221,7 @@ class PrisKVClient:
         return objs, success_mask
 
     def set(self, keys: List[str], obj_inputs: torch.Tensor) -> bool:
+        start_time = time.perf_counter()
         logger.debug(f"Pris set {len(keys)} keys")
         count = len(keys)
         items = self.kv_cache_write_mem_pool.try_allocate_kv_cache(
@@ -251,10 +251,11 @@ class PrisKVClient:
              f"- 总键数量: {len(keys)}\n"
              f"- 状态码: {status}\n"
              f"- 完整键列表: {keys}")
+        elapsed_us = (time.perf_counter() - start_time) * 1e6
+        logger.info(f"Pris mset | keys={len(keys)} | shapes={self.kv_cache_shape} | status={status} | time={elapsed_us:.2f}µs")
         if status != 0:
             logger.error(f"Pris mset {len(keys)} failed, status {status}")
             return False
-        logger.debug(f"Pris mset {len(keys)} success")
         return True
 
 
