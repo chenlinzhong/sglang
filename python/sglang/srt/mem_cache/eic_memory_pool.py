@@ -18,7 +18,7 @@ from sglang.srt.mem_cache.memory_pool import (
 )
 
 logger = logging.getLogger(__name__)
-TensorPoolSize = 8192
+G_TensorPoolSize = 2048
 
 REMOTE_EIC_YAML_ENV_VAR = "REMOTE_EIC_YAML"
 
@@ -38,7 +38,7 @@ class FlexibleKVCacheMemoryPool:
         self.kv_cache_shape = kv_cache_shape
         self.kv_cache_dtype = kv_cache_dtype
 
-        self.max_kv_cache_num = TensorPoolSize * 2
+        self.max_kv_cache_num = G_TensorPoolSize * 2
 
         self.mempool = torch.zeros(
             (self.max_kv_cache_num,) + kv_cache_shape,
@@ -94,7 +94,7 @@ class PrisKVClient:
     """
 
     def __init__(self, endpoint: str, kv_cache_dtype, kv_cache_shape, device="cpu"):
-        global G_EnableKVSetGPUDirect, G_EnableKVGetGPUDirect
+        global G_EnableKVSetGPUDirect, G_EnableKVGetGPUDirect, G_TensorPoolSize
         config_file = os.environ.get(REMOTE_EIC_YAML_ENV_VAR, "/sgl-workspace/config/remote-eic.yaml")
         if not os.path.exists(config_file):
             logger.error(f"Config file {config_file} does not exist")
@@ -112,6 +112,9 @@ class PrisKVClient:
 
         G_EnableKVGetGPUDirect = config.get("enable_kvget_gpu_direct", False)
         logger.info(f"eic enable_kvget_gpu_direct: {G_EnableKVGetGPUDirect}")
+
+        G_TensorPoolSize = config.get("tensor_pool_size", 2048)
+        logger.info(f"eic tensor_pool_size: {G_TensorPoolSize}")
 
         self.client = pris.PrisClient(raddr, int(rport))
        
@@ -349,7 +352,7 @@ class EICBaseTokenToKVPoolHost:
     def get_flat_data(self, indices) -> Tuple[Optional[torch.Tensor], List[bool]]:
         logger.debug(f"Get flat data indices {indices}")
         keys = self._encode_key_exclusive(indices)
-        bs = TensorPoolSize
+        bs = G_TensorPoolSize
         ret = []
         masks = []
 
@@ -380,7 +383,7 @@ class EICBaseTokenToKVPoolHost:
         flat_data = flat_data.contiguous()
         values = torch.split(flat_data, 1, dim=self.split_dim)
 
-        bs = TensorPoolSize
+        bs = G_TensorPoolSize
         split_time = time.perf_counter()
         for i in range(0, len(keys), bs):
             key = keys[i : i + bs]
@@ -418,7 +421,7 @@ class EICBaseTokenToKVPoolHost:
     def get_page_data(self, content_hashs):
         logger.debug(f"Get flat data content_hashs {content_hashs}")
         keys = self._encode_key_shared(content_hashs)
-        bs = TensorPoolSize
+        bs = G_TensorPoolSize
         ret = []
         masks = []
 
@@ -446,7 +449,7 @@ class EICBaseTokenToKVPoolHost:
         keys = self._encode_key_shared(content_hashs)
         flat_data = flat_data.contiguous()
         values = torch.split(flat_data, self.page_size, dim=self.split_dim)
-        bs = TensorPoolSize
+        bs = G_TensorPoolSize
 
         for i in range(0, len(keys), bs):
             key = keys[i : i + bs]
