@@ -244,9 +244,9 @@ class PrisKVClient:
         logger.debug(f"Pris get {count} keys data cost %.2f us", get_data_execution_time)
 
         # Ensure the output tensor is on the target device
-        if self.kv_cache_mem_pool.device != self.device:
-            logger.debug(f"Moving batch_get result from {self.kv_cache_mem_pool.device} to {self.device}")
-            objs = objs.to(self.device)
+        # if self.kv_cache_mem_pool.device != self.device:
+        #     logger.debug(f"Moving batch_get result from {self.kv_cache_mem_pool.device} to {self.device}")
+        #     objs = objs.to(self.device)
         return objs, success_mask
 
     def set(self, keys: List[str], obj_inputs: torch.Tensor) -> bool:
