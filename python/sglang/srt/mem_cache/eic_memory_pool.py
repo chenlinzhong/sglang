@@ -251,7 +251,7 @@ class PrisKVClient:
 
     def set(self, keys: List[str], obj_inputs: torch.Tensor) -> bool:
         start_time = time.perf_counter()
-        logger.debug(f"Pris set {len(keys)} keys, obj_inputs={obj_inputs.shape}")
+        logger.debug(f"Pris set {len(keys)} keys")
         count = len(keys)
         items = self.kv_cache_write_mem_pool.try_allocate_kv_cache(
             self.kv_cache_shape, self.kv_cache_dtype, count
