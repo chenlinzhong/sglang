@@ -195,9 +195,9 @@ class PrisKVClient:
 
         # Ensure the output tensor is on the target device
         result = torch.stack(objs)
-        if self.kv_cache_mem_pool.device != self.device:
-            logger.debug(f"Moving get result from {self.kv_cache_mem_pool.device} to {self.device}")
-            result = result.to(self.device)
+        # if self.kv_cache_mem_pool.device != self.device:
+        #     logger.debug(f"Moving get result from {self.kv_cache_mem_pool.device} to {self.device}")
+        #     result = result.to(self.device)
         return result
 
     def batch_get(
