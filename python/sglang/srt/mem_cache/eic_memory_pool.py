@@ -62,7 +62,8 @@ class FlexibleKVCacheMemoryPool:
         logger.info(
             f"Registered memory pool shape {self.kv_cache_shape}, dtype {self.kv_cache_dtype}, "
             f"kv_cache_num {self.max_kv_cache_num}, device {device}, "
-            f"total_size {(self.max_kv_cache_num * (self.mempool[0].numel() * self.mempool[0].element_size()))/1024/1024}MB"
+            f"single_kv_cache_size {np.prod(self.kv_cache_shape) * self.kv_cache_dtype.itemsize / 1024 / 1024:.2f}MB, "
+            f"total_size {(self.max_kv_cache_num * (self.mempool[0].numel() * self.mempool[0].element_size())) / 1024 / 1024:.2f}MB"
         )
 
     def try_allocate_kv_cache(self, shape, dtype, count=1):
