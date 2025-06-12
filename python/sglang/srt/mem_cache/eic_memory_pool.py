@@ -266,9 +266,6 @@ class PrisKVClient:
         for i, key in enumerate(keys):
             temp = objs[i].reshape(obj_inputs[i].shape).contiguous()
             temp.copy_(obj_inputs[i])
-            # Move to CPU if G_EnableKVSetGPUDirect is False
-            if not G_EnableKVSetGPUDirect:
-                temp = temp.cpu()
             sgls.append(pris.SGL(
                 temp.data_ptr(),
                 temp.element_size() * temp.numel(),
