@@ -7,6 +7,8 @@ from typing import List, Optional, Tuple
 import pris
 import torch
 import yaml
+import numpy as np
+
 
 from sglang.srt.mem_cache.memory_pool import (
     KVCache,
