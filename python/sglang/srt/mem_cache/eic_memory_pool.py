@@ -18,7 +18,7 @@ from sglang.srt.mem_cache.memory_pool import (
 )
 
 logger = logging.getLogger(__name__)
-TensorPoolSize = 10240
+TensorPoolSize = 8192
 
 REMOTE_EIC_YAML_ENV_VAR = "REMOTE_EIC_YAML"
 
@@ -33,7 +33,7 @@ class FlexibleKVCacheMemoryPool:
     def __init__(self, client: pris.PrisClient, device: str, kv_cache_shape, kv_cache_dtype):
         self._init = False
         self.client = client
-        self.device = device
+        self.device = device 
         """ (num_layer, 2, chunk_size, num_kv_head, head_size) """
         self.kv_cache_shape = kv_cache_shape
         self.kv_cache_dtype = kv_cache_dtype
@@ -94,6 +94,7 @@ class PrisKVClient:
     """
 
     def __init__(self, endpoint: str, kv_cache_dtype, kv_cache_shape, device="cpu"):
+        global G_EnableKVSetGPUDirect, G_EnableKVGetGPUDirect
         config_file = os.environ.get(REMOTE_EIC_YAML_ENV_VAR, "/sgl-workspace/config/remote-eic.yaml")
         if not os.path.exists(config_file):
             logger.error(f"Config file {config_file} does not exist")
@@ -106,19 +107,32 @@ class PrisKVClient:
         address_part = remote_url.split("://")[1]
         raddr, rport = address_part.split("-")
 
+        G_EnableKVSetGPUDirect = config.get("enable_kvset_gpu_direct", False)
+        logger.info(f"eic enable_kvset_gpu_direct: {G_EnableKVSetGPUDirect}")
+
+        G_EnableKVGetGPUDirect = config.get("enable_kvget_gpu_direct", False)
+        logger.info(f"eic enable_kvget_gpu_direct: {G_EnableKVGetGPUDirect}")
+
         self.client = pris.PrisClient(raddr, int(rport))
-        self.device = device
+       
         self.kv_cache_shape = kv_cache_shape
         self.kv_cache_dtype = kv_cache_dtype
+
+        # Use GPU if G_EnableKVGetGPUDirect is True, else CPU
+        kv_get_device = "cuda" if G_EnableKVGetGPUDirect and torch.cuda.is_available() else "cpu"
+
         self.kv_cache_mem_pool = FlexibleKVCacheMemoryPool(
             self.client,
-            device if G_EnableKVGetGPUDirect else "cpu",
+            kv_get_device,
             kv_cache_shape,
             kv_cache_dtype,
         )
+
+        # Use GPU if G_EnableKVSetGPUDirect is True, else CPU
+        kv_set_device = "cuda" if G_EnableKVSetGPUDirect and torch.cuda.is_available() else "cpu"
         self.kv_cache_write_mem_pool = FlexibleKVCacheMemoryPool(
             self.client,
-            device if G_EnableKVSetGPUDirect else "cpu",
+            kv_set_device,
             kv_cache_shape,
             kv_cache_dtype,
         )
@@ -172,7 +186,13 @@ class PrisKVClient:
             logger.error(f"Pris mget {keys} failed, status {status}")
             return None
         logger.info(f"Pris mget | keys={len(keys)} | shapes={self.kv_cache_shape} | status={status} | time={get_data_execution_time:.2f}µs")
-        return torch.stack(objs)
+
+        # Ensure the output tensor is on the target device
+        result = torch.stack(objs)
+        if self.kv_cache_mem_pool.device != self.device:
+            logger.debug(f"Moving get result from {self.kv_cache_mem_pool.device} to {self.device}")
+            result = result.to(self.device)
+        return result
 
     def batch_get(
         self, keys: List[str]
@@ -213,10 +233,14 @@ class PrisKVClient:
             else:
                 logger.error(f"Pris mget {len(keys)} keys failed, status {status}")
                 return None, []
-        
         get_data_end_time = time.perf_counter()
         get_data_execution_time = (get_data_end_time - get_data_start_time) * 1e6
         logger.debug(f"Pris get {count} keys data cost %.2f us", get_data_execution_time)
+
+        # Ensure the output tensor is on the target device
+        if self.kv_cache_mem_pool.device != self.device:
+            logger.debug(f"Moving batch_get result from {self.kv_cache_mem_pool.device} to {self.device}")
+            objs = objs.to(self.device)
         return objs, success_mask
 
     def set(self, keys: List[str], obj_inputs: torch.Tensor) -> bool:
@@ -236,6 +260,7 @@ class PrisKVClient:
         for i, key in enumerate(keys):
             temp = objs[i].reshape(obj_inputs[i].shape).contiguous()
             temp.copy_(obj_inputs[i])
+            # Move to CPU if G_EnableKVSetGPUDirect is False
             if not G_EnableKVSetGPUDirect:
                 temp = temp.cpu()
             sgls.append(pris.SGL(
