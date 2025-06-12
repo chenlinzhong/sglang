@@ -379,7 +379,7 @@ class EICBaseTokenToKVPoolHost:
         return flat_data, masks
 
     def assign_flat_data(self, indices, flat_data):
-        logger.debug(f"Assign flat data indices {indices},shape={flat_data.shape}")
+        logger.debug(f"Assign flat data indices {indices},shape={flat_data.shape},split_dim={self.split_dim}")
         start_time = time.perf_counter()
 
         keys = self._encode_key_exclusive(indices)
