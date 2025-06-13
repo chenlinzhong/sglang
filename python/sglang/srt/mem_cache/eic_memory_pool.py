@@ -333,7 +333,6 @@ class EICBaseTokenToKVPoolHost:
         ]
 
     def _get_host_ip(self):
-        return "127.0.0.1"
         import socket
         return socket.gethostbyname(socket.gethostname())
 
@@ -589,6 +588,8 @@ class EICMHATokenToKVPoolHost(EICBaseTokenToKVPoolHost):
         self.pris_client = PrisKVClient(
             None, self.dtype, self.kvcache_shape, device_pool.device
         )
+
+
 
 
 class EICMLATokenToKVPoolHost(EICBaseTokenToKVPoolHost):
