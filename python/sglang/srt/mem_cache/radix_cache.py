@@ -154,8 +154,8 @@ class RadixCache(BasePrefixCache):
                 f"value:{node.value.tolist() if isinstance(node.value, torch.Tensor) else node.value},"
                 f"host_value:{node.host_value.tolist() if isinstance(node.host_value, torch.Tensor) else node.host_value},"
                 f"evicted:{node.evicted}"
-                f"len_device:{len(node.value)}"
-                f"len_host:{len(node.host_value)}"
+                f"len_device:{len(node.value) if node.value is not None else 0}"
+                f"len_host:{len(node.host_value) if node.host_value is not None else 0}"
             )
 
         # Use BFS to traverse the tree
