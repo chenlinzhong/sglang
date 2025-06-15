@@ -1283,8 +1283,8 @@ class Scheduler(
                 f"{self.token_to_kv_pool_allocator.available_size()=}\n"
                 f"{self.tree_cache.evictable_size()=}\n"
             )
-            logger.info(f"memory leak start to print tree_nodes, info={msg}")
-            self.tree_cache.print_tree_nodes()
+            # logger.info(f"memory leak start to print tree_nodes, info={msg}")
+            # self.tree_cache.print_tree_nodes()
             warnings.warn(msg)
             if crash_on_warnings():
                 raise ValueError(msg)
