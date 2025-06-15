@@ -145,7 +145,7 @@ class RadixCache(BasePrefixCache):
             else:
                 parent_id_str = str(node.parent.id) if node.parent else "None"
 
-            logger.debug(
+            logger.info(
                 f"nodeid:{node.id},"
                 f"parentid:{parent_id_str},"
                 f"ref:{node.lock_ref},"
