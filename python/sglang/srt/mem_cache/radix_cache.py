@@ -132,6 +132,7 @@ class RadixCache(BasePrefixCache):
             self.key_match_fn = partial(_key_match_paged, page_size=page_size)
             self.get_child_key_fn = lambda key: tuple(key[:page_size])
         self.reset()
+        self.DEBUG_TREE = os.getenv("DEBUG_TREE", "false").lower() == "true"
 
     
     #only for debug
@@ -277,7 +278,8 @@ class RadixCache(BasePrefixCache):
         logger.debug(f"page_aligned_token_ids:{page_aligned_token_ids}")
         logger.debug(f"new_indices:{new_indices}")
         logger.debug(f"new_last_node:{new_last_node}")
-        #self.print_tree_nodes()
+        if self.DEBUG_TREE:
+            self.print_tree_nodes()
 
         self.req_to_token_pool.write(
             (req.req_pool_idx, slice(len(req.prefix_indices), len(new_indices))),
