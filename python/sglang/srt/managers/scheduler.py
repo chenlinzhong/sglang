@@ -1282,6 +1282,7 @@ class Scheduler(
                 f"{available_size=}, {protected_size=}, {self.max_total_num_tokens=}\n"
                 f"{self.token_to_kv_pool_allocator.available_size()=}\n"
                 f"{self.tree_cache.evictable_size()=}\n"
+                f"{self.token_to_kv_pool_allocator.get_size_and_free_losts()}"
             )
             logger.info(f"memory leak start to print tree_nodes, info={msg}")
             self.tree_cache.print_tree_nodes()
