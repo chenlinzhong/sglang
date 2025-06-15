@@ -159,7 +159,7 @@ class TokenToKVPoolAllocator:
         return len(self.free_slots)
     
     def get_size_and_free_losts(self):
-        return (size, self.free_slots)
+        return (self.size, self.free_slots)
 
     def get_kvcache(self):
         return self._kvcache
