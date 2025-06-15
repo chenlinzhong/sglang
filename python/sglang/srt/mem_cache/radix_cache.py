@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from sglang.srt.managers.schedule_batch import Req
 
 import logging
+import os
 logger = logging.getLogger(__name__)
 
 class TreeNode:
