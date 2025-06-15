@@ -1277,6 +1277,7 @@ class Scheduler(
             else self.max_total_num_tokens - protected_size
         )
         if memory_leak:
+            self.tree_cache.print_tree_nodes()
             msg = (
                 "token_to_kv_pool_allocator memory leak detected! "
                 f"{available_size=}, {protected_size=}, {self.max_total_num_tokens=}\n"
