@@ -138,6 +138,8 @@ class RadixCache(BasePrefixCache):
     
     #only for debug
     def print_tree_nodes(self):
+        if not self.DEBUG_TREE:
+            return 
         """Print all nodes in the tree with detailed information in the specified format."""
         def _print_node_info(node: TreeNode, parent_id: Optional[int] = None):
             if node == self.root_node:
@@ -281,8 +283,7 @@ class RadixCache(BasePrefixCache):
         logger.debug(f"page_aligned_token_ids:{page_aligned_token_ids}")
         logger.debug(f"new_indices:{new_indices}")
         logger.debug(f"new_last_node:{new_last_node}")
-        if self.DEBUG_TREE:
-            self.print_tree_nodes()
+        self.print_tree_nodes()
 
         self.req_to_token_pool.write(
             (req.req_pool_idx, slice(len(req.prefix_indices), len(new_indices))),
