@@ -272,6 +272,7 @@ class HiCacheController:
         while not self.stop_event.is_set():
             try:
                 operation = self.write_queue.get(block=True, timeout=1)
+                logger.debug(f"start write to cpu: {operation.host_indices=},{operation.device_indices}")
                 self.mem_pool_host.write_page_all_layers(
                     operation.host_indices,
                     operation.device_indices,
@@ -279,6 +280,7 @@ class HiCacheController:
                 )
                 self.write_stream.synchronize()
                 self.mem_pool_host.complete_io(operation.host_indices)
+                logger.debug(f"end write to cpu: {operation.host_indices=},{operation.device_indices}")
                 for node_id in operation.node_ids:
                     if node_id != 0:
                         self.ack_write_queue.put(node_id)
@@ -299,8 +301,10 @@ class HiCacheController:
                 operation.data = self.mem_pool_host.get_flat_data(
                     operation.host_indices
                 )
+                logger.debug(f"start load from cpu:{operation.host_indices=}")
                 self.mem_pool_device.transfer(operation.device_indices, operation.data)
                 self.mem_pool_host.complete_io(operation.host_indices)
+                logger.debug(f"end load from cpu:{operation.host_indices=}")
                 for node_id in operation.node_ids:
                     if node_id != 0:
                         self.ack_load_queue.put(node_id)
