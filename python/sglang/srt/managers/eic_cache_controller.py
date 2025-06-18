@@ -237,38 +237,37 @@ class EICCacheController(HiCacheController):
         """
         Directly write through KV caches to host memory without buffering.
         """
-        with torch.cuda.stream(self.write_stream):
-            while not self.stop_event.is_set():
-                #logger.debug("wirte thread eventloop running")
-                try:
-                    operation = self.write_queue.get(block=True, timeout=1)
-                    if self.write_policy == "write_through":
-                        torch.cuda.synchronize()
-                    self.write_to_eic(operation)
-                except Empty:
-                    continue
-                except Exception as e:
-                    logger.error(e, e.with_traceback(e.__traceback__))
+        torch.cuda.set_stream(self.write_stream)
+        while not self.stop_event.is_set():
+            #logger.debug("wirte thread eventloop running")
+            try:
+                operation = self.write_queue.get(block=True, timeout=1)
+                if self.write_policy == "write_through":
+                    torch.cuda.synchronize()
+                self.write_to_eic(operation)
+            except Empty:
+                continue
+            except Exception as e:
+                logger.error(e, e.with_traceback(e.__traceback__))
 
     def load_thread_func_direct(self):
         """
         Directly load KV caches from host memory to device memory without buffering.
         """
-        torch.cuda.current_stream().synchronize()
-        with torch.cuda.stream(self.load_stream):
-            while not self.stop_event.is_set():
-                #logger.debug("load thread eventloop running")
-                # self.load_cache_event.wait(timeout=1)
-                # if not self.load_cache_event.is_set():
-                #     continue
-                # self.load_cache_event.clear()
-                try:
-                    operation = self.load_queue.get(block=True, timeout=1)
-                    self.load_from_eic(operation)
-                except Empty:
-                    continue
-                except Exception as e:
-                    logger.error(e, e.with_traceback(e.__traceback__))
+        torch.cuda.set_stream(self.load_stream)
+        while not self.stop_event.is_set():
+            #logger.debug("load thread eventloop running")
+            # self.load_cache_event.wait(timeout=1)
+            # if not self.load_cache_event.is_set():
+            #     continue
+            # self.load_cache_event.clear()
+            try:
+                operation = self.load_queue.get(block=True, timeout=1)
+                self.load_from_eic(operation)
+            except Empty:
+                continue
+            except Exception as e:
+                logger.error(e, e.with_traceback(e.__traceback__))
 
     def host_allocate(self, size):
         """
