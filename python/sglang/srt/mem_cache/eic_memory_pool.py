@@ -119,7 +119,9 @@ class PrisKVClient:
         G_TensorPoolSize = config.get("tensor_pool_size", 2048)
         logger.info(f"eic tensor_pool_size: {G_TensorPoolSize}")
 
-        self.client = pris.PrisClient(raddr, int(rport))
+        password = config.get("pris_password", "")
+
+        self.client = pris.PrisClient(raddr, int(rport), pris_password)
         self.device = device
         self.kv_cache_shape = kv_cache_shape
         self.kv_cache_dtype = kv_cache_dtype
