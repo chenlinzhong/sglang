@@ -127,6 +127,7 @@ from sglang.srt.managers.tp_worker import TpModelWorker
 from sglang.srt.managers.tp_worker_overlap_thread import TpModelWorkerClient
 from sglang.srt.managers.utils import validate_input_length
 from sglang.srt.mem_cache.chunk_cache import ChunkCache
+from sglang.srt.mem_cache.eic_hiradix_cache import EICHiRadixCache
 from sglang.srt.mem_cache.hiradix_cache import HiRadixCache
 from sglang.srt.mem_cache.radix_cache import RadixCache
 from sglang.srt.metrics.collector import SchedulerMetricsCollector, SchedulerStats
@@ -216,6 +217,9 @@ class Scheduler(
         self.gpu_id = gpu_id
         self.enable_hierarchical_cache = server_args.enable_hierarchical_cache
         self.page_size = server_args.page_size
+        self.enable_eic_cache = (
+            server_args.enable_eic_cache if self.enable_hierarchical_cache else False
+        )
         self.dp_size = server_args.dp_size
         self.attn_tp_rank, self.attn_tp_size, self.attn_dp_rank = (
             compute_dp_attention_world_info(
@@ -530,15 +534,31 @@ class Scheduler(
             )
         else:
             if self.enable_hierarchical_cache:
-                self.tree_cache = HiRadixCache(
-                    req_to_token_pool=self.req_to_token_pool,
-                    token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
-                    tp_cache_group=self.tp_cpu_group,
-                    page_size=self.page_size,
-                    hicache_ratio=server_args.hicache_ratio,
-                    hicache_size=server_args.hicache_size,
-                    hicache_write_policy=server_args.hicache_write_policy,
+                tp_cache_group = (
+                    self.attn_tp_cpu_group
+                    if server_args.enable_dp_attention
+                    else self.tp_cpu_group
                 )
+                if self.enable_eic_cache:
+                    self.tree_cache = EICHiRadixCache(
+                        req_to_token_pool=self.req_to_token_pool,
+                        token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
+                        tp_cache_group=tp_cache_group,
+                        page_size=self.page_size,
+                        hicache_ratio=server_args.hicache_ratio,
+                        hicache_size=server_args.hicache_size,
+                        hicache_write_policy=server_args.hicache_write_policy,
+                    )
+                else:
+                    self.tree_cache = HiRadixCache(
+                        req_to_token_pool=self.req_to_token_pool,
+                        token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
+                        tp_cache_group=self.tp_cpu_group,
+                        page_size=self.page_size,
+                        hicache_ratio=server_args.hicache_ratio,
+                        hicache_size=server_args.hicache_size,
+                        hicache_write_policy=server_args.hicache_write_policy,
+                    )
             else:
                 self.tree_cache = RadixCache(
                     req_to_token_pool=self.req_to_token_pool,
@@ -1167,6 +1187,15 @@ class Scheduler(
             f"#running-req: {running_bs}, "
         )
 
+        if self.enable_hierarchical_cache:
+            num_write_queue_size = self.tree_cache.cache_controller.write_queue.qsize()
+            num_load_queue_size = self.tree_cache.cache_controller.load_queue.qsize()
+            f += (
+                f"#write-queue: {num_write_queue_size}, "
+                f"#load-queue: {num_load_queue_size}, "
+                f"#hit_rate: {adder.log_hit_tokens / (adder.log_input_tokens + adder.log_hit_tokens):.2f}, "
+            )
+
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
             f += f"#unbootstrapped-req: {len(self.disagg_prefill_bootstrap_queue.queue)}, "
             f += f"#queue-req: {len(self.waiting_queue)}, "
@@ -1235,6 +1264,16 @@ class Scheduler(
 
         if self.disaggregation_mode == DisaggregationMode.DECODE:
             msg += f"pre-allocated usage: {self.num_tokens_pre_allocated / self.max_total_num_tokens:.2f}, "
+
+        if self.enable_hierarchical_cache and not isinstance(
+            self.tree_cache, ChunkCache
+        ):
+            num_write_queue_size = self.tree_cache.cache_controller.write_queue.qsize()
+            num_load_queue_size = self.tree_cache.cache_controller.load_queue.qsize()
+            msg += (
+                f"#write-queue: {num_write_queue_size}, "
+                f"#load-queue: {num_load_queue_size}, "
+            )
 
         msg += (
             f"cuda graph: {can_run_cuda_graph}, "
@@ -1437,7 +1476,10 @@ class Scheduler(
             )
 
             res = adder.add_one_req(
-                req, self.chunked_req, self.enable_hierarchical_cache
+                req,
+                self.chunked_req,
+                self.enable_hierarchical_cache,
+                self.enable_eic_cache,
             )
 
             if res != AddReqResult.CONTINUE:
