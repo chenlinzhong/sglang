@@ -1296,6 +1296,7 @@ class Scheduler(
         self._publish_kv_events()
 
     def check_memory(self):
+        return 
         available_size = (
             self.token_to_kv_pool_allocator.available_size()
             + self.tree_cache.evictable_size()
