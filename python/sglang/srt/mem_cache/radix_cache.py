@@ -51,16 +51,19 @@ class TreeNode:
         self.key = None
         self.value = None
         self.lock_ref = 0
-        self.last_access_time = time.monotonic()
+        self.last_access_time = time.time()
 
         self.hit_count = 0
         # indicating the node is loading KV cache from host
         self.loading = False
         # store the host indices of KV cache
         self.host_value = None
+        # for block-wise cache
+        self.content_hash = None
 
         self.id = TreeNode.counter if id is None else id
         TreeNode.counter += 1
+
 
     @property
     def evicted(self):
