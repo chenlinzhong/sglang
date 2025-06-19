@@ -286,6 +286,15 @@ class PrisKVClient:
             logger.error(f"Pris mset {len(keys)} failed, status {status}")
             return False
         return True
+    
+    def delete(self,  keys: List[str]) -> bool:
+        status = self.client.mdel(keys)
+        if status != 0:
+            logger.error(f"Pris mdel {len(keys)} failed, status {status}")
+            return False
+        logger.info(f"Pris mdel {len(keys)} keys successfully, status {status}")
+        return True
+
 
 
 class EICBaseTokenToKVPoolHost:
@@ -548,6 +557,9 @@ class EICBaseTokenToKVPoolHost:
 
     @synchronized()
     def free(self, indices: torch.Tensor) -> int:
+        if self.mem_state[indices] == MemoryStateInt.BACKUP:
+            keys = self._encode_key_exclusive(indices)
+            self.pris_client.delete(keys)
         self.mem_state[indices] = MemoryStateInt.IDLE
         self.free_slots = torch.concat([self.free_slots, indices])
         self.can_use_mem_size += len(indices)
