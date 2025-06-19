@@ -319,7 +319,7 @@ class EICBaseTokenToKVPoolHost:
         else:
             self.size = int(device_pool.size * host_to_device_ratio)
         self.size = self.size - (self.size % self.page_size)
-
+        logger.info(f"EICBaseTokenToKVPoolHost init,{self.size=},{host_size=},{self.size_per_token=}")
         # Initialize memory states and tracking structures
         self.mem_state = torch.zeros(
             (self.size,), dtype=torch.uint8, device=self.device
