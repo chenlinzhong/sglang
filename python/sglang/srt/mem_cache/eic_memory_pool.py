@@ -557,6 +557,7 @@ class EICBaseTokenToKVPoolHost:
 
     @synchronized()
     def free(self, indices: torch.Tensor) -> int:
+        logger.info(f"start to free {indices=}")
         if self.mem_state[indices] == MemoryStateInt.BACKUP:
             keys = self._encode_key_exclusive(indices)
             self.pris_client.delete(keys)
